@@ -19,23 +19,35 @@ public class DatastoreServlet extends HttpServlet {
     @Override
     public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("text/html");
-        resp.getWriter().println("<html><head><title>CS263 Assignment 3 - Darshan Maiya</title></head><body>");
-        resp.getWriter().println("<h2>CS263 Assignment 3 - Darshan Maiya</h2>");
+        
+        PrintWriter respWriter = resp.getWriter();
+        
+        respWriter.println("<html><head><title>CS263 Assignment 3 - Darshan Maiya</title></head><body>");
+        respWriter.println("<h2>CS263 Assignment 3 - Darshan Maiya</h2>");
 
         String paramKeyName = req.getParameter("keyname");
         String paramValue = req.getParameter("value");
         
+        DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
+        
+        MemcacheService syncCache = MemcacheServiceFactory.getMemcacheService();
+        syncCache.setErrorHandler(ErrorHandlers.getConsistentLogAndContinue(Level.INFO));
+        
         if(paramKeyName == null && paramValue == null) {
-            // List all
-            PrintWriter out = resp.getWriter();
+            // List all exisiting entities
             
-            out.println("Showing all values stored: <br /><br />");
+            String allValuesString = "Entries in Datastore: <br /><br />";
+            allValuesString += "<table border><thead><tr><th>Key</th><th>Value</th><th>Timestamp</th></tr></thead><tbody>";
             
-            out.println("<table border><thead><tr><th>Key</th><th>Value</th><th>Created At</th></tr></thead><tbody>");
+            String memCacheTable = "<hr />Entries in Memcache: <br /><br />";
+            memCacheTable += "<table border><thead><tr><th>Key</th><th>Value</th><th>Timestamp</th></tr></thead><tbody>";
             
-            DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
+            String valuesString = "";
+            String memCacheString = "";
+            
             Query q = new Query("TaskData");
-            PreparedQuery pq = datastore.prepare(q);  
+            PreparedQuery pq = datastore.prepare(q);
+            
             for (Entity result : pq.asIterable()) {
                 String keyName = result.getKey().toString();
                 keyName = keyName.substring(10, keyName.length()-2);
@@ -45,76 +57,81 @@ public class DatastoreServlet extends HttpServlet {
                 DateFormat df = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
                 String timestamp = df.format(result.getProperty("date"));
                 
-                out.println("<tr><td>" + keyName + "</td><td>" + value + "</td><td>" + timestamp + "</td></tr>"); 
+                valuesString += "<tr><td>" + keyName + "</td><td>" + value + "</td><td>" + timestamp + "</td></tr>";
+                
+                Entity cacheTask = (Entity) syncCache.get(keyName);
+                if (cacheTask != null) {
+                    value = (String) cacheTask.getProperty("value");
+                    timestamp = df.format(cacheTask.getProperty("date"));
+                    memCacheString += "<tr><td>" + keyName + "</td><td>" + value + "</td><td>" + timestamp + "</td></tr>";
+                }
             }
             
-            out.println("</tbody></table>");
+            if(!valuesString.equals("")) {
+                allValuesString += valuesString;
+                allValuesString += "</tbody></table>";
+            } else {
+                allValuesString = "<br />No entities in Datastore.<br />";
+            }
             
+            if(!memCacheString.equals("")) {
+                memCacheTable += memCacheString;
+                memCacheTable += "</tbody></table>";
+            } else {
+                memCacheTable = "<br />No entities in Memcache.<br />";
+            }
+            
+            allValuesString += memCacheTable;
+            
+            respWriter.println(allValuesString);
         } else if(paramKeyName != null && paramValue == null) {
             // Display stored value
+            
             Key taskToRetrieve = KeyFactory.createKey("TaskData", paramKeyName);
             
-            DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
             Entity storedTask;
+            
+            String storedIn = "";
             
             try {
                 storedTask = datastore.get(taskToRetrieve);
                 
+                storedIn = "Datastore";
+                
                 DateFormat df = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
                 String timestamp = df.format(storedTask.getProperty("date"));
                 
-                resp.getWriter().println("Value stored for key '" + paramKeyName + "' is: '" + storedTask.getProperty("value") + "' with timestamp: '" + timestamp + "'");
+                Entity cacheTask = (Entity) syncCache.get(paramKeyName); // Read from cache
+                if (cacheTask != null) {
+                    storedIn = "Both";
+                } else {
+                    syncCache.put(paramKeyName, storedTask);
+                }
+                
+                respWriter.println("Value stored for key '" + paramKeyName + "' is: '" + storedTask.getProperty("value") + "' with timestamp: '" + timestamp + "'. Found in <strong>" + storedIn + "</strong>");
             
             } catch (EntityNotFoundException e) {
                 e.printStackTrace();
                 
-                resp.getWriter().println("ERROR: No value stored for key:'" + paramKeyName + "'");
+                respWriter.println("Entity found <strong>Neither</strong> in Datastore nor Memcache.");
             }
         } else if(paramKeyName != null && paramValue != null) {
             // Store value
+            
             Entity newTask = new Entity("TaskData", paramKeyName);
             newTask.setProperty("value", paramValue);
             newTask.setProperty("date", Calendar.getInstance().getTime());
              
-            DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
             datastore.put(newTask);
+            syncCache.put(paramKeyName, newTask);
             
-            resp.getWriter().println("Stored '" + paramKeyName + "' and '" + paramValue + "' in Datastore");
+            respWriter.println("Stored '" + paramKeyName + "' and '" + paramValue + "' in Datastore.<br />");
+            respWriter.println("Stored '" + paramKeyName + "' and '" + paramValue + "' in Memcache.<br />");
         } else {
             // Invalid
-            resp.getWriter().println("Invalid parameters passed.");
+            respWriter.println("Invalid parameters passed.");
         }
         
-        /*Key bobKey = KeyFactory.createKey("Person", "Bob");
-        Entity bob = new Entity(bobKey);
-        bob.setProperty("gender", "male");
-        bob.setProperty("age", "23");*/
-        
-        //datastore.put(bob);
-        
-        /*Key bobKey = KeyFactory.createKey("Person", "Bob");
-        Key aliceKey = KeyFactory.createKey("Person", "Alice");
-         
-        DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
-        Entity alice, bob;
-        
-        try {
-            alice = datastore.get(aliceKey);
-            bob = datastore.get(bobKey);
-         
-            String aliceAge = String.valueOf(alice.getProperty("age"));
-            String bobAge = String.valueOf(bob.getProperty("age"));
-            System.out.println("Alice's age: " + aliceAge);
-            System.out.println("Bob's age: " + bobAge);
-            
-            resp.getWriter().println("Alice’s age: " + aliceAge + "<br />" + "Bob’s age: " + bobAge);
-        
-        } catch (EntityNotFoundException e) {
-            e.printStackTrace();
-            
-            resp.getWriter().println("Alice and/or Bob not found.");
-        }*/
-        
-        resp.getWriter().println("</body></html>");
+        respWriter.println("</body></html>");
     }
 }
