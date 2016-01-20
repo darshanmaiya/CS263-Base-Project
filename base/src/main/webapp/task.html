@@ -3,10 +3,11 @@
         <title>Task</title>
     </head>
     <body>
-        <p>Enqueue a value, to be processed by a worker.</p>
+        <p>Enqueue a key (left) and value (right), to be processed by a worker.</p>
         <form action="/enqueue" method="post">
-            <input type="text" name="keyname">
-            <input type="submit">
+            <input required type="text" name="keyname" placeholder="Key" />
+            <input required type="text" name="value" placeholder="Value" /><br /><br />
+            <input type="submit" />
         </form>
     </body>
 </html>

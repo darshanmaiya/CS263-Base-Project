@@ -1,9 +1,8 @@
 package cs263w16;
 
-import javax.servlet.*;
 import javax.servlet.http.*;
+
 import java.io.*;
-import java.util.*;
 import java.util.logging.*;
 import com.google.appengine.api.datastore.*;
 import com.google.appengine.api.memcache.*;
@@ -11,7 +10,6 @@ import com.google.appengine.api.memcache.*;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Date;
 
 @SuppressWarnings("serial")
 public class DatastoreServlet extends HttpServlet {
