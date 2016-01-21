@@ -2,17 +2,17 @@ package cs263w16;
 
 import javax.servlet.*;
 import javax.servlet.http.*;
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.WebTarget;
+import javax.ws.rs.core.Form;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.DatastoreServiceFactory;
-import com.google.appengine.api.datastore.Entity;
-import com.google.appengine.api.memcache.ErrorHandlers;
-import com.google.appengine.api.memcache.MemcacheService;
-import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import org.glassfish.jersey.client.ClientConfig;
 
 import java.io.*;
-import java.util.Calendar;
-import java.util.logging.Level;
+import javax.ws.rs.client.Entity;
 
 @SuppressWarnings("serial")
 public class Worker extends HttpServlet {
@@ -21,17 +21,15 @@ public class Worker extends HttpServlet {
         String key = request.getParameter("keyname");
         String value = request.getParameter("value");
         
-        Entity newTask = new Entity("TaskData", key);
-        newTask.setProperty("value", value);
-        newTask.setProperty("date", Calendar.getInstance().getTime());
-
-        // Store in datastore
-        DatastoreService datastore = DatastoreServiceFactory.getDatastoreService();
-        datastore.put(newTask);
+        ClientConfig config = new ClientConfig();
+        Client client = ClientBuilder.newClient(config);
+        String url = request.getRequestURL().toString();
+        url = url.substring(0, url.indexOf(request.getRequestURI()));
+        WebTarget service = client.target(url);
         
-        // Store in cache
-        MemcacheService syncCache = MemcacheServiceFactory.getMemcacheService();
-        syncCache.setErrorHandler(ErrorHandlers.getConsistentLogAndContinue(Level.INFO));
-        syncCache.put(key, newTask);
+        Form form =new Form();
+        form.param("keyname", key);
+        form.param("value", value);
+        service.path("rest").path("ds").request().post(Entity.entity(form,MediaType.APPLICATION_FORM_URLENCODED),Response.class);
     }
 }
